@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync } from "node:fs";
+import path from "node:path";
 import type {
   ConversationStatus,
   USER_SEND_MESSAGE_NAME,
@@ -8,27 +10,18 @@ import { v4 as uuidV4 } from "uuid";
 import { broadcaster, conversationRepository, taskOrchestrator } from "@/core/conversation";
 import { getResolver } from "@/core/messageResolver";
 import { transcribeAudio } from "@/core/transcribe";
-import { setGlobalState } from "@/globalState";
+import { getGlobalState, setGlobalState } from "@/globalState";
 import { getSessionHistories } from "@/utils/getSessions";
 import { logger } from "@/utils/logger";
 import type { ServerConfig } from "../config";
 import type { MessageRegistry, ToolRegistry } from "../registry";
 
-/**
- * 服务器构造选项
- */
 export interface AmigoServerOptions {
-  /** 服务器配置 */
   config: ServerConfig;
-  /** 工具注册表 */
   toolRegistry?: ToolRegistry;
-  /** 消息注册表 */
   messageRegistry?: MessageRegistry;
 }
 
-/**
- * 服务接口暴露
- */
 class AmigoServer {
   private port: number;
   private _toolRegistry?: ToolRegistry;
@@ -40,7 +33,6 @@ class AmigoServer {
     this._toolRegistry = options.toolRegistry;
     this._messageRegistry = options.messageRegistry;
 
-    // 将注册表中的工具和消息存储到全局状态
     if (options.toolRegistry) {
       setGlobalState("registryTools", options.toolRegistry.getAll());
     }
@@ -58,46 +50,87 @@ class AmigoServer {
   }
 
   init() {
+    const port = this.port;
+
     Bun.serve({
       fetch: async (req: any, server: any) => {
         const url = new URL(req.url);
 
-        // CORS 预检请求
+        const corsHeaders = {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        };
+
         if (req.method === "OPTIONS") {
-          return new Response(null, {
-            headers: {
-              "Access-Control-Allow-Origin": "*",
-              "Access-Control-Allow-Methods": "POST, OPTIONS",
-              "Access-Control-Allow-Headers": "Content-Type",
-            },
-          });
+          return new Response(null, { headers: corsHeaders });
         }
 
-        // 语音转录 API
-        if (url.pathname === "/api/transcribe" && req.method === "POST") {
+        // 音频上传：接收 multipart/form-data，保存到本地，返回公网 URL
+        if (url.pathname === "/api/upload-audio" && req.method === "POST") {
           try {
-            const body = (await req.json()) as { audio: string; format: string };
-            const { audio, format } = body;
+            const storagePath = getGlobalState("globalStoragePath");
+            const audioDir = path.join(storagePath, "audio-temp");
+            if (!existsSync(audioDir)) mkdirSync(audioDir, { recursive: true });
 
-            if (!audio || !format) {
-              return new Response(
-                JSON.stringify({ error: "Missing required fields: audio, format" }),
-                {
-                  status: 400,
-                  headers: {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*",
-                  },
-                },
-              );
+            const formData = await req.formData();
+            const file = formData.get("file") as File | null;
+            if (!file) {
+              return new Response(JSON.stringify({ error: "Missing file field" }), {
+                status: 400,
+                headers: { "Content-Type": "application/json", ...corsHeaders },
+              });
             }
 
-            const text = await transcribeAudio(audio, format);
+            const ext = file.name.split(".").pop() || "webm";
+            const filename = `${uuidV4()}.${ext}`;
+            const filePath = path.join(audioDir, filename);
+            await Bun.write(filePath, await file.arrayBuffer());
+
+            const publicBase = process.env.PUBLIC_BASE_URL || `http://localhost:${port}`;
+            const audioUrl = `${publicBase}/audio-temp/${filename}`;
+
+            logger.info(`[Server] 音频已上传: ${audioUrl}`);
+            return new Response(JSON.stringify({ url: audioUrl }), {
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          } catch (error: any) {
+            logger.error("[Server] 音频上传失败:", error);
+            return new Response(JSON.stringify({ error: error.message || "Upload failed" }), {
+              status: 500,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
+        }
+
+        // 静态文件服务：提供已上传的音频文件
+        if (url.pathname.startsWith("/audio-temp/") && req.method === "GET") {
+          const storagePath = getGlobalState("globalStoragePath");
+          const filename = path.basename(url.pathname);
+          const filePath = path.join(storagePath, "audio-temp", filename);
+          const bunFile = Bun.file(filePath);
+          if (!(await bunFile.exists())) {
+            return new Response("Not found", { status: 404 });
+          }
+          return new Response(bunFile, { headers: corsHeaders });
+        }
+
+        // 转录：接收公网 URL，调用 Qwen ASR
+        if (url.pathname === "/api/transcribe" && req.method === "POST") {
+          try {
+            const body = (await req.json()) as { url: string };
+            const { url: audioUrl } = body;
+
+            if (!audioUrl) {
+              return new Response(JSON.stringify({ error: "Missing required field: url" }), {
+                status: 400,
+                headers: { "Content-Type": "application/json", ...corsHeaders },
+              });
+            }
+
+            const text = await transcribeAudio(audioUrl);
             return new Response(JSON.stringify({ text }), {
-              headers: {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Origin": "*",
-              },
+              headers: { "Content-Type": "application/json", ...corsHeaders },
             });
           } catch (error: any) {
             logger.error("[Server] 转录请求处理失败:", error);
@@ -105,16 +138,12 @@ class AmigoServer {
               JSON.stringify({ error: error.message || "Transcription failed" }),
               {
                 status: 500,
-                headers: {
-                  "Content-Type": "application/json",
-                  "Access-Control-Allow-Origin": "*",
-                },
+                headers: { "Content-Type": "application/json", ...corsHeaders },
               },
             );
           }
         }
 
-        // WebSocket 升级
         if (server.upgrade(req)) {
           return;
         }
@@ -126,22 +155,17 @@ class AmigoServer {
           try {
             const parsedMessage = JSON.parse(message) as WebSocketMessage<USER_SEND_MESSAGE_NAME>;
 
-            // 根据消息类型获取或生成 taskId
             let taskId: string;
             if (parsedMessage.type === "createTask") {
-              // createTask 消息不包含 taskId，生成新的 UUID
               taskId = uuidV4();
             } else {
-              // 其他消息从 data 中获取 taskId
               taskId = (parsedMessage.data as any).taskId?.trim() || uuidV4();
             }
 
-            // 特殊处理 loadTask：检查任务是否存在
             if (parsedMessage.type === "loadTask") {
               const conversation = conversationRepository.load(taskId);
 
               if (!conversation) {
-                // 任务不存在，直接发送错误消息
                 logger.warn(`[Server] 任务不存在: ${taskId}`);
                 ws.send(
                   JSON.stringify({
@@ -156,7 +180,6 @@ class AmigoServer {
                 return;
               }
 
-              // 任务存在，继续正常处理
               if (!broadcaster.hasConnection(taskId, ws)) {
                 broadcaster.addConnection(taskId, ws);
               }
@@ -178,15 +201,12 @@ class AmigoServer {
               return;
             }
 
-            // 其他消息类型：获取或创建会话
             const conversation = conversationRepository.getOrLoad(taskId);
 
-            // 管理 WebSocket 连接
             if (!broadcaster.hasConnection(taskId, ws)) {
               broadcaster.addConnection(taskId, ws);
             }
 
-            // 发送 ack
             broadcaster.broadcast(taskId, {
               type: "ack",
               data: {
@@ -196,7 +216,6 @@ class AmigoServer {
               },
             });
 
-            // 处理消息
             const resolver = getResolver(
               parsedMessage.type as USER_SEND_MESSAGE_NAME,
               conversation,
@@ -246,7 +265,6 @@ class AmigoServer {
               conversation?.status as ConversationStatus,
             );
 
-            // 所有连接断开且状态不是 completed/idle 时，中断会话
             if (isLastConnection && isActiveStatus && conversation) {
               taskOrchestrator.interrupt(conversation);
             }

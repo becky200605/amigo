@@ -5,18 +5,17 @@ export type VoiceRecorderStatus = "idle" | "recording" | "transcribing";
 
 const MAX_RECORDING_SECONDS = 60;
 
-/**
- * 从 WebSocket URL 推导出 HTTP 转录 API URL
- * ws://localhost:10013 -> http://localhost:10013/api/transcribe
- * wss://example.com -> https://example.com/api/transcribe
- */
+function deriveUploadUrl(wsUrl: string): string {
+  const httpUrl = wsUrl.replace(/^ws(s?):\/\//, "http$1://");
+  return `${httpUrl}/api/upload-audio`;
+}
+
 function deriveTranscribeUrl(wsUrl: string): string {
   const httpUrl = wsUrl.replace(/^ws(s?):\/\//, "http$1://");
   return `${httpUrl}/api/transcribe`;
 }
 
 export interface UseVoiceRecorderOptions {
-  /** WebSocket URL，用于推导转录 API 地址 */
   wsUrl?: string;
 }
 
@@ -32,9 +31,9 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const uploadUrl = deriveUploadUrl(wsUrl);
   const transcribeUrl = deriveTranscribeUrl(wsUrl);
 
-  // 清理定时器
   const clearTimers = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -46,7 +45,6 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
     }
   }, []);
 
-  // 清理媒体流
   const cleanupStream = useCallback(() => {
     if (streamRef.current) {
       for (const track of streamRef.current.getTracks()) {
@@ -56,40 +54,38 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
     }
   }, []);
 
-  // 将 Blob 转为 base64
-  const blobToBase64 = useCallback((blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const dataUrl = reader.result as string;
-        // 去掉 data:audio/webm;base64, 前缀
-        const base64 = dataUrl.split(",")[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }, []);
+  // 上传音频文件，返回公网 URL
+  const uploadAudio = useCallback(
+    async (audioBlob: Blob): Promise<string> => {
+      const ext = audioBlob.type.split("/")[1]?.split(";")[0] || "webm";
+      const formData = new FormData();
+      formData.append("file", audioBlob, `recording.${ext}`);
 
-  // 发送音频到服务端进行转录
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = (await response.json()) as { error?: string };
+        throw new Error(errorData.error || `Upload failed: ${response.status}`);
+      }
+
+      const data = (await response.json()) as { url: string };
+      return data.url;
+    },
+    [uploadUrl],
+  );
+
+  // 上传音频拿到公网 URL，再调 Qwen ASR 转录
   const sendForTranscription = useCallback(
     async (audioBlob: Blob): Promise<string> => {
-      const base64Audio = await blobToBase64(audioBlob);
-
-      // 根据 MIME 类型确定格式
-      const mimeType = audioBlob.type;
-      let format = "webm";
-      if (mimeType.includes("ogg")) format = "ogg";
-      else if (mimeType.includes("mp4") || mimeType.includes("m4a")) format = "m4a";
-      else if (mimeType.includes("wav")) format = "wav";
-      else if (mimeType.includes("webm")) format = "webm";
+      const audioUrl = await uploadAudio(audioBlob);
 
       const response = await fetch(transcribeUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ audio: base64Audio, format }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: audioUrl }),
       });
 
       if (!response.ok) {
@@ -100,16 +96,14 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
       const data = (await response.json()) as { text: string };
       return data.text;
     },
-    [blobToBase64, transcribeUrl],
+    [uploadAudio, transcribeUrl],
   );
 
-  // 开始录音
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      // 选择浏览器支持的 MIME 类型
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
         : MediaRecorder.isTypeSupported("audio/webm")
@@ -128,16 +122,14 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
         }
       };
 
-      mediaRecorder.start(100); // 每 100ms 收集一次数据
+      mediaRecorder.start(100);
       setStatus("recording");
       setRecordingDuration(0);
 
-      // 录音计时器
       timerRef.current = setInterval(() => {
         setRecordingDuration((prev) => prev + 1);
       }, 1000);
 
-      // 最大录音时长限制
       maxTimerRef.current = setTimeout(() => {
         toast.warning(`录音已达到最大时长 ${MAX_RECORDING_SECONDS} 秒`);
         stopRecording();
@@ -155,7 +147,6 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
     }
   }, []);
 
-  // 停止录音并返回转录文字
   const stopRecording = useCallback((): Promise<string> => {
     return new Promise((resolve, reject) => {
       const mediaRecorder = mediaRecorderRef.current;
@@ -175,7 +166,6 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
         });
         audioChunksRef.current = [];
 
-        // 检查音频是否太短
         if (audioBlob.size < 1000) {
           toast.warning("录音时间太短，请重试");
           setStatus("idle");
@@ -204,7 +194,6 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
     });
   }, [clearTimers, cleanupStream, sendForTranscription]);
 
-  // 取消录音
   const cancelRecording = useCallback(() => {
     const mediaRecorder = mediaRecorderRef.current;
     if (mediaRecorder && mediaRecorder.state !== "inactive") {
@@ -217,14 +206,12 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
     setRecordingDuration(0);
   }, [clearTimers, cleanupStream]);
 
-  // 组件卸载时清理
   useEffect(() => {
     return () => {
       cancelRecording();
     };
   }, [cancelRecording]);
 
-  // 格式化录音时长
   const formattedDuration = `${String(Math.floor(recordingDuration / 60)).padStart(2, "0")}:${String(recordingDuration % 60).padStart(2, "0")}`;
 
   return {
