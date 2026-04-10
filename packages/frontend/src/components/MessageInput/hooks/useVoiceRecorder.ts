@@ -5,11 +5,6 @@ export type VoiceRecorderStatus = "idle" | "recording" | "transcribing";
 
 const MAX_RECORDING_SECONDS = 60;
 
-function deriveUploadUrl(wsUrl: string): string {
-  const httpUrl = wsUrl.replace(/^ws(s?):\/\//, "http$1://");
-  return `${httpUrl}/api/upload-audio`;
-}
-
 function deriveTranscribeUrl(wsUrl: string): string {
   const httpUrl = wsUrl.replace(/^ws(s?):\/\//, "http$1://");
   return `${httpUrl}/api/transcribe`;
@@ -31,7 +26,6 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const uploadUrl = deriveUploadUrl(wsUrl);
   const transcribeUrl = deriveTranscribeUrl(wsUrl);
 
   const clearTimers = useCallback(() => {
@@ -54,38 +48,33 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
     }
   }, []);
 
-  // 上传音频文件，返回公网 URL
-  const uploadAudio = useCallback(
-    async (audioBlob: Blob): Promise<string> => {
-      const ext = audioBlob.type.split("/")[1]?.split(";")[0] || "webm";
-      const formData = new FormData();
-      formData.append("file", audioBlob, `recording.${ext}`);
+  // 将 Blob 转为 base64
+  const blobToBase64 = useCallback((blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = (reader.result as string).split(",")[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }, []);
 
-      const response = await fetch(uploadUrl, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = (await response.json()) as { error?: string };
-        throw new Error(errorData.error || `Upload failed: ${response.status}`);
-      }
-
-      const data = (await response.json()) as { url: string };
-      return data.url;
-    },
-    [uploadUrl],
-  );
-
-  // 上传音频拿到公网 URL，再调 Qwen ASR 转录
+  // base64 编码后发给服务端，服务端构造 Data URL 调 Qwen ASR
   const sendForTranscription = useCallback(
     async (audioBlob: Blob): Promise<string> => {
-      const audioUrl = await uploadAudio(audioBlob);
+      const base64Audio = await blobToBase64(audioBlob);
+      const mimeType = audioBlob.type;
+      let format = "webm";
+      if (mimeType.includes("ogg")) format = "ogg";
+      else if (mimeType.includes("mp4") || mimeType.includes("m4a")) format = "m4a";
+      else if (mimeType.includes("wav")) format = "wav";
 
       const response = await fetch(transcribeUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: audioUrl }),
+        body: JSON.stringify({ audio: base64Audio, format }),
       });
 
       if (!response.ok) {
@@ -96,7 +85,7 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
       const data = (await response.json()) as { text: string };
       return data.text;
     },
-    [uploadAudio, transcribeUrl],
+    [blobToBase64, transcribeUrl],
   );
 
   const startRecording = useCallback(async () => {

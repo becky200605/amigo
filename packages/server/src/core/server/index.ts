@@ -1,5 +1,3 @@
-import { existsSync, mkdirSync } from "node:fs";
-import path from "node:path";
 import type {
   ConversationStatus,
   USER_SEND_MESSAGE_NAME,
@@ -10,7 +8,7 @@ import { v4 as uuidV4 } from "uuid";
 import { broadcaster, conversationRepository, taskOrchestrator } from "@/core/conversation";
 import { getResolver } from "@/core/messageResolver";
 import { transcribeAudio } from "@/core/transcribe";
-import { getGlobalState, setGlobalState } from "@/globalState";
+import { setGlobalState } from "@/globalState";
 import { getSessionHistories } from "@/utils/getSessions";
 import { logger } from "@/utils/logger";
 import type { ServerConfig } from "../config";
@@ -50,8 +48,6 @@ class AmigoServer {
   }
 
   init() {
-    const port = this.port;
-
     Bun.serve({
       fetch: async (req: any, server: any) => {
         const url = new URL(req.url);
@@ -66,69 +62,23 @@ class AmigoServer {
           return new Response(null, { headers: corsHeaders });
         }
 
-        // 音频上传：接收 multipart/form-data，保存到本地，返回公网 URL
-        if (url.pathname === "/api/upload-audio" && req.method === "POST") {
-          try {
-            const storagePath = getGlobalState("globalStoragePath");
-            const audioDir = path.join(storagePath, "audio-temp");
-            if (!existsSync(audioDir)) mkdirSync(audioDir, { recursive: true });
-
-            const formData = await req.formData();
-            const file = formData.get("file") as File | null;
-            if (!file) {
-              return new Response(JSON.stringify({ error: "Missing file field" }), {
-                status: 400,
-                headers: { "Content-Type": "application/json", ...corsHeaders },
-              });
-            }
-
-            const ext = file.name.split(".").pop() || "webm";
-            const filename = `${uuidV4()}.${ext}`;
-            const filePath = path.join(audioDir, filename);
-            await Bun.write(filePath, await file.arrayBuffer());
-
-            const publicBase = process.env.PUBLIC_BASE_URL || `http://localhost:${port}`;
-            const audioUrl = `${publicBase}/audio-temp/${filename}`;
-
-            logger.info(`[Server] 音频已上传: ${audioUrl}`);
-            return new Response(JSON.stringify({ url: audioUrl }), {
-              headers: { "Content-Type": "application/json", ...corsHeaders },
-            });
-          } catch (error: any) {
-            logger.error("[Server] 音频上传失败:", error);
-            return new Response(JSON.stringify({ error: error.message || "Upload failed" }), {
-              status: 500,
-              headers: { "Content-Type": "application/json", ...corsHeaders },
-            });
-          }
-        }
-
-        // 静态文件服务：提供已上传的音频文件
-        if (url.pathname.startsWith("/audio-temp/") && req.method === "GET") {
-          const storagePath = getGlobalState("globalStoragePath");
-          const filename = path.basename(url.pathname);
-          const filePath = path.join(storagePath, "audio-temp", filename);
-          const bunFile = Bun.file(filePath);
-          if (!(await bunFile.exists())) {
-            return new Response("Not found", { status: 404 });
-          }
-          return new Response(bunFile, { headers: corsHeaders });
-        }
-
-        // 转录：接收公网 URL，调用 Qwen ASR
+        // 转录：接收 base64 音频，调用 Qwen ASR
         if (url.pathname === "/api/transcribe" && req.method === "POST") {
           try {
-            const body = (await req.json()) as { url: string };
-            const { url: audioUrl } = body;
+            const body = (await req.json()) as { audio: string; format: string };
+            const { audio, format } = body;
 
-            if (!audioUrl) {
-              return new Response(JSON.stringify({ error: "Missing required field: url" }), {
-                status: 400,
-                headers: { "Content-Type": "application/json", ...corsHeaders },
-              });
+            if (!audio || !format) {
+              return new Response(
+                JSON.stringify({ error: "Missing required fields: audio, format" }),
+                {
+                  status: 400,
+                  headers: { "Content-Type": "application/json", ...corsHeaders },
+                },
+              );
             }
 
-            const text = await transcribeAudio(audioUrl);
+            const text = await transcribeAudio(audio, format);
             return new Response(JSON.stringify({ text }), {
               headers: { "Content-Type": "application/json", ...corsHeaders },
             });

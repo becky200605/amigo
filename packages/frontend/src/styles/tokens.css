@@ -6,10 +6,10 @@
 :root {
   /* ========== Colors (颜色) ========== */
 
-  /* Primary - 主色调 (用于主要操作和强调) */
-  --color-primary: #3b82f6;
-  --color-primary-hover: #2563eb;
-  --color-primary-light: #dbeafe;
+  /* Primary - 主色调 (中国红) */
+  --color-primary: #cc0000;
+  --color-primary-hover: #aa0000;
+  --color-primary-light: #fde8e8;
 
   /* Success - 成功色 (仅用于成功状态) */
   --color-success: #10b981;
@@ -24,12 +24,12 @@
   --color-warning-light: #fef3c7;
 
   /* Info - 信息色 (用于提示信息) */
-  --color-info: #3b82f6;
-  --color-info-light: #dbeafe;
+  --color-info: #cc0000;
+  --color-info-light: #fde8e8;
 
-  /* Neutral - 中性色 (用于文本和背景) */
-  --color-neutral-50: #fafafa;
-  --color-neutral-100: #f5f5f5;
+  /* Neutral - 中性色 (带红色调) */
+  --color-neutral-50: #faf8f3;
+  --color-neutral-100: #f5f0e8;
   --color-neutral-200: #e5e5e5;
   --color-neutral-300: #d4d4d4;
   --color-neutral-400: #a3a3a3;

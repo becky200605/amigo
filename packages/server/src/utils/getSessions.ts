@@ -21,6 +21,11 @@ export const getSessionHistories = async () => {
     for (const dirent of taskIds) {
       if (dirent.isDirectory()) {
         const taskId = dirent.name;
+
+        // 跳过非会话目录
+        if (taskId === "audio-temp") {
+          continue;
+        }
         const originalJsonPath = path.join(
           globalStoragePath,
           taskId,

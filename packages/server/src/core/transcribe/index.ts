@@ -2,10 +2,10 @@ import { logger } from "@/utils/logger";
 
 /**
  * 调用 Qwen ASR API (OpenAI compatible 模式) 进行音频转录
- * 接受公网可访问的音频 URL
+ * 使用 base64 Data URL 直接传输音频，无需公网 URL
  * 文档: https://www.alibabacloud.com/help/en/model-studio/qwen-speech-recognition
  */
-export async function transcribeAudio(audioUrl: string): Promise<string> {
+export async function transcribeAudio(base64Audio: string, format: string): Promise<string> {
   const apiKey = process.env.STT_API_KEY || process.env.MODEL_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -19,7 +19,20 @@ export async function transcribeAudio(audioUrl: string): Promise<string> {
     process.env.STT_BASE_URL || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
   const model = process.env.STT_MODEL_NAME || "qwen3-asr-flash";
 
-  logger.info(`[Transcribe] 开始转录音频, URL: ${audioUrl}, 模型: ${model}`);
+  // 构造 Data URL: data:<mime>;base64,<data>
+  const mimeMap: Record<string, string> = {
+    webm: "audio/webm",
+    ogg: "audio/ogg",
+    mp4: "audio/mp4",
+    m4a: "audio/mp4",
+    wav: "audio/wav",
+    mp3: "audio/mpeg",
+    flac: "audio/flac",
+  };
+  const mimeType = mimeMap[format] ?? `audio/${format}`;
+  const dataUri = `data:${mimeType};base64,${base64Audio}`;
+
+  logger.info(`[Transcribe] 开始转录音频, 格式: ${format}, 模型: ${model}`);
 
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
@@ -36,7 +49,7 @@ export async function transcribeAudio(audioUrl: string): Promise<string> {
             {
               type: "input_audio",
               input_audio: {
-                data: audioUrl,
+                data: dataUri,
               },
             },
           ],

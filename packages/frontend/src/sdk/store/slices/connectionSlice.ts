@@ -27,7 +27,7 @@ export const createConnectionSlice: StateCreator<WebSocketStore, [], [], Connect
 
     console.log("[ConnectionSlice] Connecting...");
     set({ connectionStatus: "connecting" });
-    const ws = new WebSocket(`${isLocalhost() ? "ws" : "wss"}://${window.location.hostname}:10013`);
+    const ws = new WebSocket(`${isLocalhost() ? "ws" : "ws"}://${window.location.hostname}:10013`);
 
     ws.onopen = () => {
       console.log("[ConnectionSlice] Connected, readyState:", ws.readyState);
