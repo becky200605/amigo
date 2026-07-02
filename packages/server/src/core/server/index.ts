@@ -49,7 +49,7 @@ class AmigoServer {
 
   init() {
     Bun.serve({
-      fetch: async (req: any, server: any) => {
+      fetch: async (req: Request, server: Bun.Server) => {
         const url = new URL(req.url);
 
         const corsHeaders = {
@@ -81,15 +81,13 @@ class AmigoServer {
             return new Response(JSON.stringify({ text }), {
               headers: { "Content-Type": "application/json", ...corsHeaders },
             });
-          } catch (error: any) {
+          } catch (error) {
+            const err = error instanceof Error ? error : new Error(String(error));
             logger.error("[Server] Transcription request failed:", error);
-            return new Response(
-              JSON.stringify({ error: error.message || "Transcription failed" }),
-              {
-                status: 500,
-                headers: { "Content-Type": "application/json", ...corsHeaders },
-              },
-            );
+            return new Response(JSON.stringify({ error: err.message || "Transcription failed" }), {
+              status: 500,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
           }
         }
 
@@ -109,7 +107,7 @@ class AmigoServer {
             const taskId =
               parsedMessage.type === "createTask"
                 ? uuidV4()
-                : (parsedMessage.data as any).taskId?.trim() || uuidV4();
+                : (parsedMessage.data as { taskId?: string }).taskId?.trim() || uuidV4();
 
             if (parsedMessage.type === "loadTask") {
               const conversation = conversationRepository.load(taskId);

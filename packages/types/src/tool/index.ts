@@ -62,8 +62,7 @@ export interface ToolParamDefinition<K> {
   params?: ToolParamDefinition<string>[];
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: 用于工具集合的宽松类型
-export interface ToolInterface<K extends ToolNames | any> {
+export interface ToolInterface<K extends ToolNames | string = ToolNames | string> {
   name: K extends ToolNames ? K : string;
   description: string;
   whenToUse: string;
@@ -71,11 +70,11 @@ export interface ToolInterface<K extends ToolNames | any> {
   useExamples: string[];
 
   invoke: (props: {
-    params: K extends ToolNames ? ToolParams<K> : any;
+    params: K extends ToolNames ? ToolParams<K> : unknown;
     context: ToolExecutionContext;
   }) => Promise<{
     message: string;
-    toolResult: K extends ToolNames ? ToolResult<K> : any;
+    toolResult: K extends ToolNames ? ToolResult<K> : unknown;
   }>;
 }
 
