@@ -8,7 +8,9 @@ export function handleTaskCreated(
   const { taskId, sessionHistories } = message.data;
 
   // 只更新 mainTaskId，不发送 loadTask（因为这是新创建的任务，不需要加载历史）
-  store.mainTaskId = taskId;
+  if (!store.mainTaskId || store.mainTaskId.trim() === "") {
+    store.setMainTaskId(taskId);
+  }
 
   // 注册任务
   store.registerTask(taskId);

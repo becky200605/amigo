@@ -1,0 +1,33 @@
+{
+  "outputDir": "D:\\amigo\\packages\\server\\knowledge-base",
+  "startedAt": "2026-07-02T13:42:17.059Z",
+  "finishedAt": "2026-07-02T13:43:00.811Z",
+  "sources": [
+    {
+      "id": "wuchang-human-social",
+      "name": "武昌区政府人社与社会保障栏目",
+      "fetched": 40,
+      "saved": 40,
+      "skipped": 0,
+      "failed": 0
+    },
+    {
+      "id": "wuchang-grassroots",
+      "name": "武昌区基层政务公开专栏",
+      "fetched": 40,
+      "saved": 17,
+      "skipped": 8,
+      "failed": 2
+    },
+    {
+      "id": "hubei-daily",
+      "name": "湖北日报新闻客户端",
+      "fetched": 19,
+      "saved": 18,
+      "skipped": 1,
+      "failed": 0
+    }
+  ],
+  "documents": 75,
+  "chunks": 733
+}

@@ -6,6 +6,7 @@ import { CompleteTaskSchema } from "./completeTask";
 import { CompletionResultSchema } from "./completionResult";
 import type { ToolExecutionContext } from "./context";
 import { EditFileSchema } from "./editFile";
+import { PolicyKnowledgeSearchSchema } from "./policyKnowledgeSearch";
 import { ReadFileSchema } from "./readFile";
 import {
   CreateTaskDocsSchema,
@@ -30,6 +31,7 @@ export const toolSchemas = z.discriminatedUnion("name", [
   EditFileSchema,
   ReadFileSchema,
   BashSchema,
+  PolicyKnowledgeSearchSchema,
 ]);
 
 export type ToolNames = z.infer<typeof toolSchemas>["name"];

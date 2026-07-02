@@ -1,6 +1,5 @@
 import type { UserSendMessageData } from "@amigo-llm/types";
 import { logger } from "@/utils/logger";
-import type { Conversation } from "../../conversation/Conversation";
 import { conversationRepository } from "../../conversation/ConversationRepository";
 import { broadcaster } from "../../conversation/WebSocketBroadcaster";
 import BaseMessageResolver from "../base";
@@ -9,13 +8,9 @@ import BaseMessageResolver from "../base";
  * 删除任务消息解析器
  */
 export class DeleteTaskMessageResolver extends BaseMessageResolver<"deleteTask"> {
-  static resolverName = "deleteTask" as const;
+  static override resolverName = "deleteTask" as const;
 
-  constructor(conversation: Conversation) {
-    super(conversation);
-  }
-
-  async process(data: UserSendMessageData<"deleteTask">): Promise<void> {
+  override async process(data: UserSendMessageData<"deleteTask">): Promise<void> {
     const { taskId } = data;
 
     logger.info(`[DeleteTaskMessageResolver] 开始删除任务: ${taskId}`);

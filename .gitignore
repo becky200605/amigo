@@ -13,6 +13,14 @@ build/
 .vscode/
 .history/
 
+# Local editor / AI assistant state
+.agents/
+.codex/
+.cursor/
+.kiro/
+.roo/
+.specify/
+
 # Mac
 .DS_Store
 
@@ -23,14 +31,19 @@ logs/
 # Env
 .env
 .env.*
+!.env.example
+!**/.env.example
 
 # Output
 out/
 coverage/
 *.local
+*.tgz
+*.lcov
 
 # IDE
 .idea/
+*.iml
 *.swp
 
 # Misc
@@ -46,3 +59,8 @@ Desktop.ini
 
 # Bun
 .bun*
+
+# Runtime state
+storage/
+packages/*/storage/
+packages/*/logs/

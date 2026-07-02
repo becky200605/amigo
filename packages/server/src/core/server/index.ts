@@ -62,7 +62,6 @@ class AmigoServer {
           return new Response(null, { headers: corsHeaders });
         }
 
-        // 转录：接收 base64 音频，调用 Qwen ASR
         if (url.pathname === "/api/transcribe" && req.method === "POST") {
           try {
             const body = (await req.json()) as { audio: string; format: string };
@@ -83,7 +82,7 @@ class AmigoServer {
               headers: { "Content-Type": "application/json", ...corsHeaders },
             });
           } catch (error: any) {
-            logger.error("[Server] 转录请求处理失败:", error);
+            logger.error("[Server] Transcription request failed:", error);
             return new Response(
               JSON.stringify({ error: error.message || "Transcription failed" }),
               {
@@ -102,31 +101,21 @@ class AmigoServer {
       port: this.port,
       websocket: {
         message: async (ws: ServerWebSocket, message: string) => {
-          try {
-            const parsedMessage = JSON.parse(message) as WebSocketMessage<USER_SEND_MESSAGE_NAME>;
+          let parsedMessage: WebSocketMessage<USER_SEND_MESSAGE_NAME> | undefined;
 
-            let taskId: string;
-            if (parsedMessage.type === "createTask") {
-              taskId = uuidV4();
-            } else {
-              taskId = (parsedMessage.data as any).taskId?.trim() || uuidV4();
-            }
+          try {
+            parsedMessage = JSON.parse(message) as WebSocketMessage<USER_SEND_MESSAGE_NAME>;
+
+            const taskId =
+              parsedMessage.type === "createTask"
+                ? uuidV4()
+                : (parsedMessage.data as any).taskId?.trim() || uuidV4();
 
             if (parsedMessage.type === "loadTask") {
               const conversation = conversationRepository.load(taskId);
 
               if (!conversation) {
-                logger.warn(`[Server] 任务不存在: ${taskId}`);
-                ws.send(
-                  JSON.stringify({
-                    type: "error",
-                    data: {
-                      message: `任务 ${taskId} 不存在`,
-                      code: "TASK_NOT_FOUND",
-                      updateTime: Date.now(),
-                    },
-                  } as WebSocketMessage<"error">),
-                );
+                this.sendError(ws, `Task ${taskId} does not exist`, undefined, "TASK_NOT_FOUND");
                 return;
               }
 
@@ -143,10 +132,7 @@ class AmigoServer {
                 },
               });
 
-              const resolver = getResolver(
-                parsedMessage.type as USER_SEND_MESSAGE_NAME,
-                conversation,
-              );
+              const resolver = getResolver(parsedMessage.type, conversation);
               await resolver.process(parsedMessage.data);
               return;
             }
@@ -166,13 +152,20 @@ class AmigoServer {
               },
             });
 
-            const resolver = getResolver(
-              parsedMessage.type as USER_SEND_MESSAGE_NAME,
-              conversation,
-            );
+            const resolver = getResolver(parsedMessage.type, conversation);
             await resolver.process(parsedMessage.data);
           } catch (error) {
-            logger.error("处理消息时出错:", error);
+            logger.error("Failed to process WebSocket message", error);
+            const err = error instanceof Error ? error : new Error(String(error));
+            const isMissingModelApiKey = err.message.includes("MODEL_API_KEY");
+            const message = isMissingModelApiKey
+              ? "MODEL_API_KEY is not configured. Create packages/server/.env and set MODEL_API_KEY, then restart the server."
+              : `Server failed to process message: ${err.message}`;
+            const details = parsedMessage
+              ? `messageType=${parsedMessage.type}`
+              : "Failed before the WebSocket message could be parsed.";
+
+            this.sendError(ws, message, details);
           }
         },
 
@@ -181,7 +174,7 @@ class AmigoServer {
             JSON.stringify({
               type: "connected",
               data: {
-                message: "连接建立",
+                message: "Connected",
                 updateTime: Date.now(),
               },
             } as WebSocketMessage<"connected">),
@@ -199,31 +192,47 @@ class AmigoServer {
 
         close: (ws: ServerWebSocket) => {
           const conversationId = broadcaster.findConversationIdByWs(ws);
-          if (conversationId) {
-            broadcaster.removeConnection(conversationId, ws);
+          if (!conversationId) {
+            return;
+          }
 
-            const conversation = conversationRepository.get(conversationId);
-            const isLastConnection = broadcaster.getConnectionCount(conversationId) === 0;
-            const NotInterruptableStatusList: ConversationStatus[] = [
-              "completed",
-              "waiting_tool_confirmation",
-              "idle",
-              "error",
-              "aborted",
-            ];
-            const isActiveStatus = !NotInterruptableStatusList.includes(
-              conversation?.status as ConversationStatus,
-            );
+          broadcaster.removeConnection(conversationId, ws);
 
-            if (isLastConnection && isActiveStatus && conversation) {
-              taskOrchestrator.interrupt(conversation);
-            }
+          const conversation = conversationRepository.get(conversationId);
+          const isLastConnection = broadcaster.getConnectionCount(conversationId) === 0;
+          const notInterruptableStatusList: ConversationStatus[] = [
+            "completed",
+            "waiting_tool_confirmation",
+            "idle",
+            "error",
+            "aborted",
+          ];
+          const isActiveStatus = !notInterruptableStatusList.includes(
+            conversation?.status as ConversationStatus,
+          );
+
+          if (isLastConnection && isActiveStatus && conversation) {
+            taskOrchestrator.interrupt(conversation);
           }
         },
 
         drain: () => {},
       },
     });
+  }
+
+  private sendError(ws: ServerWebSocket, message: string, details?: string, code?: string): void {
+    ws.send(
+      JSON.stringify({
+        type: "error",
+        data: {
+          message,
+          details,
+          code,
+          updateTime: Date.now(),
+        },
+      }),
+    );
   }
 }
 

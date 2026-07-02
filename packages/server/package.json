@@ -9,7 +9,8 @@
   "scripts": {
     "test": "bun test",
     "build": "bun build ./src/index.ts --outdir ./dist --target='bun' --external playwright --external playwright-core --external electron",
-    "start": "bun run src/index.ts --watch"
+    "start": "bun run src/index.ts --watch",
+    "crawl:knowledge": "bun run src/scripts/crawlKnowledge.ts"
   },
   "keywords": [],
   "author": "",

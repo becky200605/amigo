@@ -10,6 +10,7 @@ import { BrowserSearch } from "./browserSearch";
 import { CompleteTask } from "./completeTask";
 import { CompletionResult } from "./completionResult";
 import { EditFile } from "./editFile";
+import { PolicyKnowledgeSearch } from "./policyKnowledgeSearch";
 import { ReadFile } from "./readFile";
 import {
   CreateTaskDocs,
@@ -401,6 +402,7 @@ export const MAIN_BASIC_TOOLS: ToolInterface<any>[] = [
   CompletionResult,
   CompleteTask,
   BrowserSearch,
+  PolicyKnowledgeSearch,
   EditFile,
   ReadFile,
   Bash,
@@ -412,6 +414,7 @@ export const MAIN_BASIC_TOOLS: ToolInterface<any>[] = [
 
 export const SUB_BASIC_TOOLS: ToolInterface<any>[] = [
   BrowserSearch,
+  PolicyKnowledgeSearch,
   EditFile,
   ReadFile,
   Bash,
@@ -429,6 +432,7 @@ export {
   CompletionResult,
   CompleteTask,
   BrowserSearch,
+  PolicyKnowledgeSearch,
   EditFile,
   ReadFile,
   Bash,

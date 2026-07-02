@@ -23,7 +23,7 @@ export const getSessionHistories = async () => {
         const taskId = dirent.name;
 
         // 跳过非会话目录
-        if (taskId === "audio-temp") {
+        if (["audio-temp", "knowledge-base", ".knowledge-base"].includes(taskId)) {
           continue;
         }
         const originalJsonPath = path.join(
@@ -50,14 +50,17 @@ export const getSessionHistories = async () => {
 
           // 读取 frontend.json 获取标题和时间
           const frontendContent = await fs.promises.readFile(frontendJsonPath, "utf-8");
-          const frontendData = JSON.parse(frontendContent);
+          const frontendData = JSON.parse(frontendContent) as {
+            messages?: Array<{ type?: string; data?: { message?: string } }>;
+            updatedAt?: string;
+          };
           const firstUserMessage = frontendData.messages?.find(
-            (msg: any) => msg.type === "userSendMessage",
+            (msg) => msg.type === "userSendMessage",
           );
           if (firstUserMessage) {
             sessionHistories.push({
               taskId,
-              title: firstUserMessage.data.message,
+              title: firstUserMessage.data?.message || "",
               updatedAt:
                 frontendData.updatedAt || originalData.updatedAt || new Date().toISOString(),
             });

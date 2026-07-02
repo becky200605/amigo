@@ -12,6 +12,8 @@ import { logger } from "@/utils/logger";
 import { taskOrchestrator } from "../conversation";
 import { createTool } from "./base";
 
+export { toKebabCase } from "./taskDocs/utils";
+
 /**
  * 文档类型到文件名的映射
  */

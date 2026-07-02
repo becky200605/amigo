@@ -9,6 +9,10 @@ export class CreateTaskMessageResolver extends BaseMessageResolver<"createTask">
   override async process(message: { message: string }): Promise<void> {
     // 设置用户输入
     taskOrchestrator.setUserInput(this.conversation, message.message);
+    const userMessage = this.conversation.memory.lastWebsocketMessage;
+    if (userMessage?.type === "userSendMessage") {
+      broadcaster.broadcast(this.conversation.id, userMessage);
+    }
 
     // 发送 taskCreated 消息给前端，同时带上最新的 sessionHistories
     broadcaster.broadcast(this.conversation.id, {

@@ -3,7 +3,7 @@ import { ChatOpenAI } from "@langchain/openai";
 export const getLlm = () => {
   const apiKey = process.env.MODEL_API_KEY;
   if (!apiKey) {
-    throw new Error("API_KEY environment variable is required");
+    throw new Error("MODEL_API_KEY environment variable is required");
   }
 
   return new ChatOpenAI({
