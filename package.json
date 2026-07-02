@@ -9,7 +9,7 @@
     "build": "bun --cwd packages/types run build && bun --cwd packages/server run build && bun --cwd packages/frontend run build",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "prepare": "lefthook install",
+    "prepare": "bun -e \"const { spawnSync } = require('node:child_process'); const git = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], { stdio: 'ignore' }); if (git.status === 0) { const hook = spawnSync('lefthook', ['install'], { stdio: 'inherit', shell: process.platform === 'win32' }); process.exit(hook.status ?? 1); }\"",
     "changeset": "changeset",
     "version": "changeset version",
     "release": "bun run build && changeset publish"
