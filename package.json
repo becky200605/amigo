@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "bun --filter '!@amigo-llm/types' start",
-    "build": "bun --filter '@amigo-llm/types' build && bun --filter '@amigo-llm/server' build && bun --filter '@amigo-llm/frontend' build",
+    "build": "bun --cwd packages/types run build && bun --cwd packages/server run build && bun --cwd packages/frontend run build",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "prepare": "lefthook install",
