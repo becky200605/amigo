@@ -17,6 +17,8 @@ jobs:
       SERVER_HOST: ${{ secrets.SERVER_HOST }}
       SERVER_USER: ${{ secrets.SERVER_USER }}
       SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
+      APP_DOMAIN: amigo.muxistudio.com
+      APP_PORT: "10013"
 
     steps:
       - name: Checkout code
@@ -63,7 +65,7 @@ jobs:
           username: ${{ env.SERVER_USER }}
           password: ${{ env.SERVER_PASSWORD }}
           target: "~/amigo"
-          source: "package.json,bun.lock,pnpm-workspace.yaml,packages/server/package.json,packages/server/tsconfig.json,packages/server/src/**,packages/server/knowledge-base/**,packages/frontend/package.json,packages/frontend/dist/**,packages/types/package.json,packages/types/dist/**"
+          source: "package.json,bun.lock,pnpm-workspace.yaml,packages/server/package.json,packages/server/dist,packages/server/knowledge-base,packages/frontend/package.json,packages/frontend/dist,packages/types/package.json,packages/types/dist"
 
       - name: Restart server
         uses: appleboy/ssh-action@v1.0.3
@@ -76,6 +78,8 @@ jobs:
 
             export PATH="$HOME/.bun/bin:$PATH"
             APP_DIR="$HOME/amigo"
+            APP_DOMAIN="${{ env.APP_DOMAIN }}"
+            APP_PORT="${{ env.APP_PORT }}"
 
             command -v bun >/dev/null 2>&1 || curl -fsSL https://bun.sh/install | bash
             export PATH="$HOME/.bun/bin:$PATH"
@@ -93,9 +97,48 @@ jobs:
             fi
 
             cd "$APP_DIR/packages/server"
-            pm2 describe amigo-server >/dev/null 2>&1 \
-              && pm2 restart amigo-server --update-env \
-              || pm2 start "bun run src/index.ts" --name amigo-server
+            pm2 delete amigo-server >/dev/null 2>&1 || true
+            pm2 start "bun dist/index.js" --name amigo-server --update-env
+
+            CADDY_DIR="$HOME/caddy"
+            if [ -d "$CADDY_DIR" ]; then
+              cat > "$CADDY_DIR/Caddyfile" <<EOF
+            $APP_DOMAIN {
+                encode zstd gzip
+                root * /srv/amigo
+
+                @websocket {
+                    header Connection *Upgrade*
+                    header Upgrade websocket
+                }
+                reverse_proxy @websocket 127.0.0.1:$APP_PORT
+
+                handle /api/* {
+                    reverse_proxy 127.0.0.1:$APP_PORT
+                }
+
+                try_files {path} /index.html
+                file_server
+            }
+            EOF
+
+              cat > "$CADDY_DIR/docker-compose.yaml" <<EOF
+            version: '3.8'
+
+            services:
+              caddy:
+                image: caddy:latest
+                network_mode: host
+                volumes:
+                  - ./Caddyfile:/etc/caddy/Caddyfile
+                  - ./caddy_data:/data
+                  - ./caddy_config:/config
+                  - ../amigo/packages/frontend/dist:/srv/amigo:ro
+            EOF
+
+              (cd "$CADDY_DIR" && (docker compose up -d || docker-compose up -d))
+              docker exec caddy-caddy-1 caddy reload --config /etc/caddy/Caddyfile || true
+            fi
 
             pm2 save || true
             echo "Deployment completed."

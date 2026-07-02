@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "bun --filter '!@amigo-llm/types' start",
-    "build": "bun --cwd packages/types run build && bun --cwd packages/server run build && bun --cwd packages/frontend run build",
+    "build": "bun run --cwd packages/types build && bun run --cwd packages/server build && bun run --cwd packages/frontend build",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "prepare": "bun -e \"const { spawnSync } = require('node:child_process'); const git = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], { stdio: 'ignore' }); if (git.status === 0) { const hook = spawnSync('lefthook', ['install'], { stdio: 'inherit', shell: process.platform === 'win32' }); process.exit(hook.status ?? 1); }\"",

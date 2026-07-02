@@ -10,7 +10,9 @@ import { isLocalhost } from "./utils/isLocalhost";
 
 const App: React.FC = () => {
   // Determine WebSocket URL based on environment
-  const wsUrl = `${isLocalhost() ? "ws" : "ws"}://${window.location.hostname}:10013`;
+  const wsUrl = isLocalhost()
+    ? `ws://${window.location.hostname}:10013`
+    : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
 
   return (
     <ErrorBoundary>

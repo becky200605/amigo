@@ -11,53 +11,61 @@ export interface ConnectionSlice {
   disconnect: () => void;
 }
 
-export const createConnectionSlice: StateCreator<WebSocketStore, [], [], ConnectionSlice> = (
-  set,
-  get,
-) => ({
-  socket: null,
-  connectionStatus: "disconnected",
+export interface ConnectionSliceConfig {
+  url?: string;
+}
 
-  connect: () => {
-    const { socket } = get();
-    if (socket?.readyState === WebSocket.OPEN) {
-      console.log("[ConnectionSlice] Already connected");
-      return;
-    }
+const getDefaultWebSocketUrl = () =>
+  isLocalhost()
+    ? `ws://${window.location.hostname}:10013`
+    : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
 
-    console.log("[ConnectionSlice] Connecting...");
-    set({ connectionStatus: "connecting" });
-    const ws = new WebSocket(`${isLocalhost() ? "ws" : "ws"}://${window.location.hostname}:10013`);
+export const createConnectionSlice =
+  (config?: ConnectionSliceConfig): StateCreator<WebSocketStore, [], [], ConnectionSlice> =>
+  (set, get) => ({
+    socket: null,
+    connectionStatus: "disconnected",
 
-    ws.onopen = () => {
-      console.log("[ConnectionSlice] Connected, readyState:", ws.readyState);
-      set({ socket: ws, connectionStatus: "connected" });
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        get().processMessage(message);
-      } catch (error) {
-        console.error("[WebSocketStore] Failed to parse message:", error);
+    connect: () => {
+      const { socket } = get();
+      if (socket?.readyState === WebSocket.OPEN) {
+        console.log("[ConnectionSlice] Already connected");
+        return;
       }
-    };
 
-    ws.onclose = () => {
-      console.log("[ConnectionSlice] Disconnected");
-      set({ socket: null, connectionStatus: "disconnected" });
-    };
+      console.log("[ConnectionSlice] Connecting...");
+      set({ connectionStatus: "connecting" });
+      const ws = new WebSocket(config?.url ?? getDefaultWebSocketUrl());
 
-    ws.onerror = (error) => {
-      console.error("[WebSocketStore] WebSocket error:", error);
-    };
-  },
+      ws.onopen = () => {
+        console.log("[ConnectionSlice] Connected, readyState:", ws.readyState);
+        set({ socket: ws, connectionStatus: "connected" });
+      };
 
-  disconnect: () => {
-    const { socket } = get();
-    if (socket) {
-      socket.close();
-      set({ socket: null, connectionStatus: "disconnected" });
-    }
-  },
-});
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          get().processMessage(message);
+        } catch (error) {
+          console.error("[WebSocketStore] Failed to parse message:", error);
+        }
+      };
+
+      ws.onclose = () => {
+        console.log("[ConnectionSlice] Disconnected");
+        set({ socket: null, connectionStatus: "disconnected" });
+      };
+
+      ws.onerror = (error) => {
+        console.error("[WebSocketStore] WebSocket error:", error);
+      };
+    },
+
+    disconnect: () => {
+      const { socket } = get();
+      if (socket) {
+        socket.close();
+        set({ socket: null, connectionStatus: "disconnected" });
+      }
+    },
+  });
