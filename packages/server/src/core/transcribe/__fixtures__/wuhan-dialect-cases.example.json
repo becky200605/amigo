@@ -1,0 +1,10 @@
+[
+  {
+    "name": "wuhan-dialect-sample-1",
+    "audioPath": "./wuhan-dialect-sample-1.wav",
+    "expectedText": "你把这个表格帮我看哈子，么样才能办这个高龄津贴？",
+    "minCharAccuracy": 0.85,
+    "minWordAccuracy": 0.75,
+    "maxLatencyMs": 30000
+  }
+]
