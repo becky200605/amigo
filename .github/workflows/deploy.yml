@@ -110,18 +110,22 @@ jobs:
                 encode zstd gzip
                 root * /srv/amigo
 
-                @websocket {
-                    header Connection *Upgrade*
-                    header Upgrade websocket
-                }
-                reverse_proxy @websocket 127.0.0.1:$APP_PORT
+                route {
+                    @websocket {
+                        header Connection *Upgrade*
+                        header Upgrade websocket
+                    }
+                    reverse_proxy @websocket 127.0.0.1:$APP_PORT
 
-                handle /api/* {
-                    reverse_proxy 127.0.0.1:$APP_PORT
-                }
+                    handle /api/* {
+                        reverse_proxy 127.0.0.1:$APP_PORT
+                    }
 
-                try_files {path} /index.html
-                file_server
+                    handle {
+                        try_files {path} /index.html
+                        file_server
+                    }
+                }
             }
             EOF
 
