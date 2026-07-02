@@ -79,6 +79,11 @@ const GenericToolRenderer: React.FC<ToolMessageRendererProps<ToolNames>> = ({ me
  */
 export const DefaultToolRenderer: React.FC<ToolMessageRendererProps<ToolNames>> = (props) => {
   const { message } = props;
+
+  if (message.toolName === "policyKnowledgeSearch") {
+    return null;
+  }
+
   const CustomRenderer = toolRendererMap[message.toolName as ToolNames];
 
   if (CustomRenderer) {

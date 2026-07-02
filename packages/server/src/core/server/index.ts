@@ -7,6 +7,8 @@ import type {
 import Bun, { type ServerWebSocket } from "bun";
 import { v4 as uuidV4 } from "uuid";
 import { broadcaster, conversationRepository, taskOrchestrator } from "@/core/conversation";
+import { DEFAULT_POLICY_SOURCES } from "@/core/knowledge/sources";
+import { loadCrawlSummary, loadPolicyDocuments } from "@/core/knowledge/store";
 import { getResolver } from "@/core/messageResolver";
 import { transcribeAudio } from "@/core/transcribe";
 import { setGlobalState } from "@/globalState";
@@ -64,6 +66,39 @@ class AmigoServer {
 
         if (req.method === "OPTIONS") {
           return new Response(null, { headers: corsHeaders });
+        }
+
+        if (url.pathname === "/api/knowledge-base" && req.method === "GET") {
+          try {
+            const limit = Math.min(Number(url.searchParams.get("limit") || 200), 500);
+            const documents = loadPolicyDocuments()
+              .slice(0, limit)
+              .map(({ content: _content, ...document }) => document);
+            const summary = loadCrawlSummary();
+
+            return new Response(
+              JSON.stringify({
+                summary,
+                sources: DEFAULT_POLICY_SOURCES.map((source) => ({
+                  id: source.id,
+                  name: source.name,
+                  startUrls: source.startUrls,
+                  allowedHosts: source.allowedHosts,
+                })),
+                documents,
+              }),
+              {
+                headers: { "Content-Type": "application/json", ...corsHeaders },
+              },
+            );
+          } catch (error) {
+            const err = error instanceof Error ? error : new Error(String(error));
+            logger.error("[Server] Knowledge base request failed:", error);
+            return new Response(JSON.stringify({ error: err.message }), {
+              status: 500,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
         }
 
         if (url.pathname === "/api/transcribe" && req.method === "POST") {

@@ -20,6 +20,7 @@ export class StreamHandler {
     "think",
     "askFollowupQuestion",
     "completeTask",
+    "policyKnowledgeSearch",
   ]);
 
   constructor(private toolExecutor: ToolExecutor) {}

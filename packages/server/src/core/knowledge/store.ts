@@ -56,6 +56,15 @@ export function loadPolicyChunks(outputDir = getKnowledgeBasePath()): PolicyChun
   return readJsonl<PolicyChunk>(chunksPath);
 }
 
+export function loadPolicyDocuments(outputDir = getKnowledgeBasePath()): PolicyDocument[] {
+  const documentsPath = path.join(outputDir, DOCUMENTS_FILE);
+  if (!existsSync(documentsPath)) {
+    return [];
+  }
+
+  return readJsonl<PolicyDocument>(documentsPath);
+}
+
 export function loadCrawlSummary(outputDir = getKnowledgeBasePath()): CrawlSummary | null {
   const manifestPath = path.join(outputDir, MANIFEST_FILE);
   if (!existsSync(manifestPath)) {
