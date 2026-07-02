@@ -103,8 +103,9 @@ jobs:
             pm2 start "bun dist/index.js" --name amigo-server --update-env
 
             CADDY_DIR="$HOME/caddy"
-            if [ -d "$CADDY_DIR" ]; then
-              cat > "$CADDY_DIR/Caddyfile" <<EOF
+            mkdir -p "$CADDY_DIR"
+
+            cat > "$CADDY_DIR/Caddyfile" <<EOF
             $APP_DOMAIN {
                 encode zstd gzip
                 root * /srv/amigo
@@ -124,7 +125,7 @@ jobs:
             }
             EOF
 
-              cat > "$CADDY_DIR/docker-compose.yaml" <<EOF
+            cat > "$CADDY_DIR/docker-compose.yaml" <<EOF
             version: '3.8'
 
             services:
@@ -138,9 +139,8 @@ jobs:
                   - ../amigo/packages/frontend/dist:/srv/amigo:ro
             EOF
 
-              (cd "$CADDY_DIR" && (docker compose up -d || docker-compose up -d))
-              docker exec caddy-caddy-1 caddy reload --config /etc/caddy/Caddyfile || true
-            fi
+            (cd "$CADDY_DIR" && (docker compose up -d || docker-compose up -d))
+            docker exec caddy-caddy-1 caddy reload --config /etc/caddy/Caddyfile || true
 
             pm2 save || true
             echo "Deployment completed."
