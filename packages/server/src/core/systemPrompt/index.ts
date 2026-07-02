@@ -10,11 +10,24 @@ import { generateToolsPrompt } from "./tools";
  * @throws Error if file does not exist
  */
 const loadPrompt = (fileName: string): string => {
-  const filePath = path.join(__dirname, fileName);
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`System prompt file not found: ${filePath}`);
+  const candidates = [
+    process.env.AMIGO_SYSTEM_PROMPT_DIR,
+    path.join(process.cwd(), "dist", "systemPrompt"),
+    path.join(process.cwd(), "src", "core", "systemPrompt"),
+  ].filter((dir): dir is string => Boolean(dir));
+
+  for (const basePath of candidates) {
+    const filePath = path.join(basePath, fileName);
+    if (fs.existsSync(filePath)) {
+      return fs.readFileSync(filePath, "utf-8");
+    }
   }
-  return fs.readFileSync(filePath, "utf-8");
+
+  throw new Error(
+    `System prompt file not found: ${fileName}. Checked: ${candidates
+      .map((basePath) => path.join(basePath, fileName))
+      .join(", ")}`,
+  );
 };
 
 /**

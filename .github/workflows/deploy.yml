@@ -96,6 +96,8 @@ jobs:
               exit 1
             fi
 
+            export AMIGO_SYSTEM_PROMPT_DIR="$APP_DIR/packages/server/dist/systemPrompt"
+
             cd "$APP_DIR/packages/server"
             pm2 delete amigo-server >/dev/null 2>&1 || true
             pm2 start "bun dist/index.js" --name amigo-server --update-env

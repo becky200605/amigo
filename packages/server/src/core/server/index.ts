@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import type {
   ConversationStatus,
   USER_SEND_MESSAGE_NAME,
@@ -22,11 +23,13 @@ export interface AmigoServerOptions {
 
 class AmigoServer {
   private port: number;
+  private storagePath: string;
   private _toolRegistry?: ToolRegistry;
   private _messageRegistry?: MessageRegistry;
 
   constructor(options: AmigoServerOptions) {
     this.port = options.config.port;
+    this.storagePath = options.config.storagePath;
     setGlobalState("globalStoragePath", options.config.storagePath);
     this._toolRegistry = options.toolRegistry;
     this._messageRegistry = options.messageRegistry;
@@ -48,6 +51,7 @@ class AmigoServer {
   }
 
   init() {
+    mkdirSync(this.storagePath, { recursive: true });
     Bun.serve({
       fetch: async (req: Request, server: Bun.Server) => {
         const url = new URL(req.url);
