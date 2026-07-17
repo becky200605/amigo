@@ -19,12 +19,14 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
 
   const [status, setStatus] = useState<VoiceRecorderStatus>("idle");
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [transcribedText, setTranscribedText] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopRecordingRef = useRef<() => Promise<string>>(async () => "");
 
   const transcribeUrl = deriveTranscribeUrl(wsUrl);
 
@@ -104,6 +106,7 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+      setTranscribedText(null);
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -121,7 +124,9 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
 
       maxTimerRef.current = setTimeout(() => {
         toast.warning(`录音已达到最大时长 ${MAX_RECORDING_SECONDS} 秒`);
-        stopRecording();
+        // The timeout is outside MessageInput's click handler, so publish the
+        // result through hook state instead of dropping the returned Promise.
+        void stopRecordingRef.current().catch(() => undefined);
       }, MAX_RECORDING_SECONDS * 1000);
     } catch (error: any) {
       console.error("[VoiceRecorder] 获取麦克风权限失败:", error);
@@ -167,6 +172,7 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
 
         try {
           const text = await sendForTranscription(audioBlob);
+          setTranscribedText(text);
           setStatus("idle");
           setRecordingDuration(0);
           resolve(text);
@@ -182,6 +188,12 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
       mediaRecorder.stop();
     });
   }, [clearTimers, cleanupStream, sendForTranscription]);
+
+  stopRecordingRef.current = stopRecording;
+
+  const clearTranscribedText = useCallback(() => {
+    setTranscribedText(null);
+  }, []);
 
   const cancelRecording = useCallback(() => {
     const mediaRecorder = mediaRecorderRef.current;
@@ -207,8 +219,10 @@ export function useVoiceRecorder(options?: UseVoiceRecorderOptions) {
     status,
     recordingDuration,
     formattedDuration,
+    transcribedText,
     startRecording,
     stopRecording,
     cancelRecording,
+    clearTranscribedText,
   };
 }

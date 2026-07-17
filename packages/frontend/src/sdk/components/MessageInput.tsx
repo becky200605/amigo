@@ -85,9 +85,11 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
     const {
       status: voiceStatus,
       formattedDuration,
+      transcribedText,
       startRecording,
       stopRecording,
       cancelRecording,
+      clearTranscribedText,
     } = useVoiceRecorder({ wsUrl: config.url });
 
     // Get current task's status
@@ -214,6 +216,21 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       },
       editable: !disabled,
     });
+
+    // Both manual stop and the 60-second automatic stop publish their result
+    // here, ensuring every successful transcription reaches the editor.
+    useEffect(() => {
+      if (!transcribedText || !editor) return;
+
+      const currentContent = editor.getText().trim();
+      if (currentContent) {
+        editor.commands.insertContent(transcribedText);
+      } else {
+        editor.commands.setContent(`<p>${transcribedText}</p>`);
+      }
+      editor.commands.focus("end");
+      clearTranscribedText();
+    }, [clearTranscribedText, editor, transcribedText]);
 
     // Update button state based on task status
     useEffect(() => {
@@ -388,17 +405,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
         await startRecording();
       } else if (voiceStatus === "recording") {
         try {
-          const text = await stopRecording();
-          if (text && editor) {
-            // 将转录文字插入编辑器（追加到现有内容后面）
-            const currentContent = editor.getText().trim();
-            if (currentContent) {
-              editor.commands.insertContent(text);
-            } else {
-              editor.commands.setContent(`<p>${text}</p>`);
-            }
-            editor.commands.focus("end");
-          }
+          await stopRecording();
         } catch {
           // 错误已在 hook 中通过 toast 处理
         }
